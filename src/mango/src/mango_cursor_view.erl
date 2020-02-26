@@ -19,7 +19,6 @@
 ]).
 
 -export([
-    view_cb/2,
     handle_message/2,
     handle_all_docs_message/2,
     composite_indexes/2,
@@ -94,7 +93,7 @@ maybe_replace_max_json(?MAX_STR) ->
 
 maybe_replace_max_json([H | T] = EndKey) when is_list(EndKey) ->
     H1 = if H == ?MAX_JSON_OBJ -> <<"<MAX>">>;
-            true -> H
+        true -> H
     end,
     [H1 | maybe_replace_max_json(T)];
 
@@ -116,7 +115,7 @@ base_args(#cursor{index = Idx, selector = Selector} = Cursor) ->
         start_key = StartKey,
         end_key = EndKey,
         include_docs = true,
-        extra = [{callback, {?MODULE, view_cb}}, {selector, Selector}]
+        update = false % mango index should already be up to date
     }.
 
 
@@ -135,18 +134,23 @@ execute(#cursor{db = Db, index = Idx, execution_stats = Stats} = Cursor0, UserFu
             #cursor{opts = Opts, bookmark = Bookmark} = Cursor,
             Args0 = apply_opts(Opts, BaseArgs),
             Args = mango_json_bookmark:update_args(Bookmark, Args0),
+<<<<<<< HEAD
             UserCtx = couch_util:get_value(user_ctx, Opts, #user_ctx{}),
             DbOpts = [{user_ctx, UserCtx}],
+=======
+>>>>>>> 76013c061... Mango work temp
             Result = case mango_idx:def(Idx) of
                 all_docs ->
                     CB = fun ?MODULE:handle_all_docs_message/2,
-                    fabric:all_docs(Db, DbOpts, CB, Cursor, Args);
+                    AllDocOpts = fabric2_util:all_docs_view_opts(Args),
+                    fabric2_db:fold_docs(Db, CB, Cursor, AllDocOpts);
                 _ ->
                     CB = fun ?MODULE:handle_message/2,
                     % Normal view
-                    DDoc = ddocid(Idx),
+                    DDocId = mango_idx:ddoc_id(Idx),
+                    {ok, DDoc} = fabric2_db:open_doc(Db, DDocId),
                     Name = mango_idx:name(Idx),
-                    fabric:query_view(Db, DbOpts, DDoc, Name, CB, Cursor, Args)
+                    couch_views:query(Db, DDoc, Name, CB, Cursor, Args)
             end,
             case Result of
                 {ok, LastCursor} ->
@@ -227,6 +231,7 @@ choose_best_index(_DbName, IndexRanges) ->
     {SelectedIndex, SelectedIndexRanges}.
 
 
+<<<<<<< HEAD
 view_cb({meta, Meta}, Acc) ->
     % Map function starting
     put(mango_docs_examined, 0),
@@ -292,6 +297,14 @@ handle_message({meta, _}, Cursor) ->
 handle_message({row, Props}, Cursor) ->
     case doc_member(Cursor, Props) of
         {ok, Doc, {execution_stats, Stats}} ->
+=======
+handle_message({meta, _}, Cursor) ->
+    {ok, Cursor};
+handle_message({row, Props}, Cursor) ->
+    io:format("DOC ~p ~n", [Props]),
+    case match_doc(Cursor, Props) of
+        {ok, Doc, {execution_stats, ExecutionStats1}} ->
+>>>>>>> 76013c061... Mango work temp
             Cursor1 = Cursor#cursor {
                 execution_stats = Stats
             },
@@ -320,6 +333,7 @@ handle_message({error, Reason}, _Cursor) ->
 
 
 handle_all_docs_message({row, Props}, Cursor) ->
+    io:format("All Docs ~p ~n", [Props]),
     case is_design_doc(Props) of
         true -> {ok, Cursor};
         false -> handle_message({row, Props}, Cursor)
@@ -343,29 +357,8 @@ handle_doc(C, _Doc) ->
     {stop, C}.
 
 
-ddocid(Idx) ->
-    case mango_idx:ddoc(Idx) of
-        <<"_design/", Rest/binary>> ->
-            Rest;
-        Else ->
-            Else
-    end.
-
-
 apply_opts([], Args) ->
     Args;
-apply_opts([{r, RStr} | Rest], Args) ->
-    IncludeDocs = case list_to_integer(RStr) of
-        1 ->
-            true;
-        R when R > 1 ->
-            % We don't load the doc in the view query because
-            % we have to do a quorum read in the coordinator
-            % so there's no point.
-            false
-    end,
-    NewArgs = Args#mrargs{include_docs = IncludeDocs},
-    apply_opts(Rest, NewArgs);
 apply_opts([{conflicts, true} | Rest], Args) ->
     NewArgs = Args#mrargs{conflicts = true},
     apply_opts(Rest, NewArgs);
@@ -420,6 +413,7 @@ apply_opts([{_, _} | Rest], Args) ->
     apply_opts(Rest, Args).
 
 
+<<<<<<< HEAD
 doc_member(Cursor, RowProps) ->
     Db = Cursor#cursor.db,
     Opts = Cursor#cursor.opts,
@@ -450,6 +444,12 @@ doc_member(Cursor, RowProps) ->
 
 
 match_doc(Selector, Doc, ExecutionStats) ->
+=======
+match_doc(Cursor, RowProps) ->
+    ExecutionStats = Cursor#cursor.execution_stats,
+    Selector = Cursor#cursor.selector,
+    Doc = couch_util:get_value(doc, RowProps),
+>>>>>>> 76013c061... Mango work temp
     case mango_selector:match(Selector, Doc) of
         true ->
             {ok, Doc, {execution_stats, ExecutionStats}};
@@ -481,6 +481,29 @@ update_bookmark_keys(Cursor, _Props) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+<<<<<<< HEAD
+=======
+runs_match_on_doc_with_no_value_test() ->
+    Cursor = #cursor {
+        db = <<"db">>,
+        opts = [],
+        execution_stats = #execution_stats{},
+        selector = mango_selector:normalize({[{<<"user_id">>, <<"1234">>}]})
+    },
+    RowProps = [
+        {id,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
+        {key,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
+        {doc,{
+            [
+                {<<"_id">>,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
+                {<<"_rev">>,<<"1-a954fe2308f14307756067b0e18c2968">>},
+                {<<"user_id">>,11}
+            ]
+        }}
+    ],
+    {Match, _, _} = match_doc(Cursor, RowProps),
+    ?assertEqual(Match, no_match).
+>>>>>>> 76013c061... Mango work temp
 
 does_not_refetch_doc_with_value_test() ->
     Cursor = #cursor {
@@ -500,7 +523,7 @@ does_not_refetch_doc_with_value_test() ->
             ]
         }}
     ],
-    {Match, _, _} = doc_member(Cursor, RowProps),
+    {Match, _, _} = match_doc(Cursor, RowProps),
     ?assertEqual(Match, ok).
 
 
