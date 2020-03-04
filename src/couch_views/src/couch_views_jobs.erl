@@ -38,7 +38,6 @@ build_view(TxDb, Mrst, UpdateSeq) ->
     build_view(TxDb, Mrst, UpdateSeq, false).
 
 build_view(TxDb, Mrst, UpdateSeq, BuildToVS) ->
-%%    io:format("bvui view ~p ~n", [UpdateSeq]),
     {ok, JobId} = build_view_async(TxDb, Mrst, BuildToVS),
     case wait_for_job(JobId, UpdateSeq) of
         ok -> ok;
@@ -61,7 +60,6 @@ wait_for_job(JobId, UpdateSeq) ->
         {ok, Subscription, _State, _Data} ->
             wait_for_job(JobId, Subscription, UpdateSeq);
         {ok, finished, Data} ->
-%%            io:format("DD ~p ~n", [Data]),
             case Data of
                 #{<<"view_seq">> := ViewSeq} when ViewSeq >= UpdateSeq ->
                     ok;

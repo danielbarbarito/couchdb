@@ -323,11 +323,17 @@ all_docs_view_opts(#mrargs{} = Args) ->
         {_, true} -> [{end_key, encode_all_doc_key(EndKey)}]
     end,
 
+    DocOpts = case Args#mrargs.conflicts of
+        true -> [conflicts | Args#mrargs.doc_options];
+        _ -> Args#mrargs.doc_options
+    end,
+
     [
         {dir, Args#mrargs.direction},
         {limit, Args#mrargs.limit},
         {skip, Args#mrargs.skip},
         {update_seq, Args#mrargs.update_seq},
         {namespace, NS},
-        {include_docs, Args#mrargs.include_docs}
-    ] ++ StartKeyOpts ++ EndKeyOpts.
+        {include_docs, Args#mrargs.include_docs},
+        {doc_opts, DocOpts}
+] ++ StartKeyOpts ++ EndKeyOpts.

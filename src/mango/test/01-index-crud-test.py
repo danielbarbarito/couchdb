@@ -113,7 +113,6 @@ class IndexCrudTests(mango.DbPerClass):
             return
         raise AssertionError("index not created")
 
-    @unittest.skip("need spidermonkey 60")
     def test_ignore_design_docs(self):
         fields = ["baz", "foo"]
         ret = self.db.create_index(fields, name="idx_02")

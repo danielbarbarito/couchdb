@@ -44,7 +44,6 @@ init() ->
         <<"retries">> := Retries,
         <<"build_to_vs">> := BuildToVS
     } = Data,
-    io:format("BUILDING ~p ~n", [Data]),
 
     {ok, Db} = try
         fabric2_db:open(DbName, [?ADMIN_CTX])
@@ -172,7 +171,6 @@ update(#{} = Db, Mrst0, State0) ->
                 if BuildToVS == false -> ok; true ->
                     couch_views_fdb:set_build_vs(TxDb, Mrst1, ViewVs, ?INDEX_READY)
                 end,
-                io:format("FINISHED ~n"),
                 report_progress(State2, finished),
                 {Mrst1, finished};
             false ->

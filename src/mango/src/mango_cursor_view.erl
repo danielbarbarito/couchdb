@@ -134,11 +134,6 @@ execute(#cursor{db = Db, index = Idx, execution_stats = Stats} = Cursor0, UserFu
             #cursor{opts = Opts, bookmark = Bookmark} = Cursor,
             Args0 = apply_opts(Opts, BaseArgs),
             Args = mango_json_bookmark:update_args(Bookmark, Args0),
-<<<<<<< HEAD
-            UserCtx = couch_util:get_value(user_ctx, Opts, #user_ctx{}),
-            DbOpts = [{user_ctx, UserCtx}],
-=======
->>>>>>> 76013c061... Mango work temp
             Result = case mango_idx:def(Idx) of
                 all_docs ->
                     CB = fun ?MODULE:handle_all_docs_message/2,
@@ -231,82 +226,14 @@ choose_best_index(_DbName, IndexRanges) ->
     {SelectedIndex, SelectedIndexRanges}.
 
 
-<<<<<<< HEAD
-view_cb({meta, Meta}, Acc) ->
-    % Map function starting
-    put(mango_docs_examined, 0),
-    set_mango_msg_timestamp(),
-    ok = rexi:stream2({meta, Meta}),
-    {ok, Acc};
-view_cb({row, Row}, #mrargs{extra = Options} = Acc) ->
-    ViewRow =  #view_row{
-        id = couch_util:get_value(id, Row),
-        key = couch_util:get_value(key, Row),
-        doc = couch_util:get_value(doc, Row)
-    },
-    case ViewRow#view_row.doc of
-        null ->
-            maybe_send_mango_ping();
-        undefined ->
-            % include_docs=false. Use quorum fetch at coordinator
-            ok = rexi:stream2(ViewRow),
-            set_mango_msg_timestamp();
-        Doc ->
-            put(mango_docs_examined, get(mango_docs_examined) + 1),
-            Selector = couch_util:get_value(selector, Options),
-            couch_stats:increment_counter([mango, docs_examined]),
-            case mango_selector:match(Selector, Doc) of
-                true ->
-                    ok = rexi:stream2(ViewRow),
-                    set_mango_msg_timestamp();
-                false ->
-                    maybe_send_mango_ping()
-            end
-        end,
-    {ok, Acc};
-view_cb(complete, Acc) ->
-    % Send shard-level execution stats
-    ok = rexi:stream2({execution_stats, {docs_examined, get(mango_docs_examined)}}),
-    % Finish view output
-    ok = rexi:stream_last(complete),
-    {ok, Acc};
-view_cb(ok, ddoc_updated) ->
-    rexi:reply({ok, ddoc_updated}).
-
-
-maybe_send_mango_ping() ->
-    Current = os:timestamp(),
-    LastPing = get(mango_last_msg_timestamp),
-    % Fabric will timeout if it has not heard a response from a worker node
-    % after 5 seconds. Send a ping every 4 seconds so the timeout doesn't happen.
-    case timer:now_diff(Current, LastPing) > ?HEARTBEAT_INTERVAL_IN_USEC of
-        false ->
-            ok;
-        true ->
-            rexi:ping(),
-            set_mango_msg_timestamp()
-    end.
-
-
-set_mango_msg_timestamp() ->
-    put(mango_last_msg_timestamp, os:timestamp()).
-
-
-handle_message({meta, _}, Cursor) ->
-    {ok, Cursor};
-handle_message({row, Props}, Cursor) ->
-    case doc_member(Cursor, Props) of
-        {ok, Doc, {execution_stats, Stats}} ->
-=======
 handle_message({meta, _}, Cursor) ->
     {ok, Cursor};
 handle_message({row, Props}, Cursor) ->
     io:format("DOC ~p ~n", [Props]),
     case match_doc(Cursor, Props) of
         {ok, Doc, {execution_stats, ExecutionStats1}} ->
->>>>>>> 76013c061... Mango work temp
             Cursor1 = Cursor#cursor {
-                execution_stats = Stats
+                execution_stats = ExecutionStats1
             },
             Cursor2 = update_bookmark_keys(Cursor1, Props),
             FinalDoc = mango_fields:extract(Doc, Cursor2#cursor.fields),
@@ -413,43 +340,10 @@ apply_opts([{_, _} | Rest], Args) ->
     apply_opts(Rest, Args).
 
 
-<<<<<<< HEAD
-doc_member(Cursor, RowProps) ->
-    Db = Cursor#cursor.db,
-    Opts = Cursor#cursor.opts,
-    ExecutionStats = Cursor#cursor.execution_stats,
-    Selector = Cursor#cursor.selector,
-    case couch_util:get_value(doc, RowProps) of
-        {DocProps} ->
-            % only matching documents are returned; the selector
-            % is evaluated at the shard level in view_cb({row, Row},
-            {ok, {DocProps}, {execution_stats, ExecutionStats}};
-        undefined ->
-            % an undefined doc was returned, indicating we should
-            % perform a quorum fetch
-            ExecutionStats1 = mango_execution_stats:incr_quorum_docs_examined(ExecutionStats),
-            couch_stats:increment_counter([mango, quorum_docs_examined]),
-            Id = couch_util:get_value(id, RowProps),
-            case mango_util:defer(fabric, open_doc, [Db, Id, Opts]) of
-                {ok, #doc{}=DocProps} ->
-                    Doc = couch_doc:to_json_obj(DocProps, []),
-                    match_doc(Selector, Doc, ExecutionStats1);
-                Else ->
-                    Else
-            end;
-        _ ->
-            % no doc, no match
-            {no_match, null, {execution_stats, ExecutionStats}}
-    end.
-
-
-match_doc(Selector, Doc, ExecutionStats) ->
-=======
 match_doc(Cursor, RowProps) ->
     ExecutionStats = Cursor#cursor.execution_stats,
     Selector = Cursor#cursor.selector,
     Doc = couch_util:get_value(doc, RowProps),
->>>>>>> 76013c061... Mango work temp
     case mango_selector:match(Selector, Doc) of
         true ->
             {ok, Doc, {execution_stats, ExecutionStats}};
@@ -474,57 +368,3 @@ update_bookmark_keys(#cursor{limit = Limit} = Cursor, Props) when Limit > 0 ->
     };
 update_bookmark_keys(Cursor, _Props) ->
     Cursor.
-
-
-%%%%%%%% module tests below %%%%%%%%
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-<<<<<<< HEAD
-=======
-runs_match_on_doc_with_no_value_test() ->
-    Cursor = #cursor {
-        db = <<"db">>,
-        opts = [],
-        execution_stats = #execution_stats{},
-        selector = mango_selector:normalize({[{<<"user_id">>, <<"1234">>}]})
-    },
-    RowProps = [
-        {id,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-        {key,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-        {doc,{
-            [
-                {<<"_id">>,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-                {<<"_rev">>,<<"1-a954fe2308f14307756067b0e18c2968">>},
-                {<<"user_id">>,11}
-            ]
-        }}
-    ],
-    {Match, _, _} = match_doc(Cursor, RowProps),
-    ?assertEqual(Match, no_match).
->>>>>>> 76013c061... Mango work temp
-
-does_not_refetch_doc_with_value_test() ->
-    Cursor = #cursor {
-        db = <<"db">>,
-        opts = [],
-        execution_stats = #execution_stats{},
-        selector = mango_selector:normalize({[{<<"user_id">>, <<"1234">>}]})
-    },
-    RowProps = [
-        {id,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-        {key,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-        {doc,{
-            [
-                {<<"_id">>,<<"b06aadcf-cd0f-4ca6-9f7e-2c993e48d4c4">>},
-                {<<"_rev">>,<<"1-a954fe2308f14307756067b0e18c2968">>},
-                {<<"user_id">>,11}
-            ]
-        }}
-    ],
-    {Match, _, _} = match_doc(Cursor, RowProps),
-    ?assertEqual(Match, ok).
-
-
--endif.

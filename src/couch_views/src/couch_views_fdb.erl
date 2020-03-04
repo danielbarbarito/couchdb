@@ -68,7 +68,7 @@ get_build_vs(TxDb, Sig) ->
     } = TxDb,
     Key = build_vs_key(TxDb, Sig),
     EV = erlfdb:wait(erlfdb:get(Tx, Key)),
-    if EV == not_found -> not_found; true ->
+    if EV == not_found -> {not_found, not_found}; true ->
         erlfdb_tuple:unpack(EV)
     end.
 
@@ -180,7 +180,6 @@ write_doc(TxDb, Sig, Views, Doc) ->
 
     ExistingViewKeys = get_view_keys(TxDb, Sig, DocId),
 
-    io:format("RE ~p ~n Vi ~p ~n", [Results, Views]),
     clear_id_idx(TxDb, Sig, DocId),
     lists:foreach(fun({View, NewRows}) ->
         #mrview{
@@ -189,7 +188,6 @@ write_doc(TxDb, Sig, Views, Doc) ->
         } = View,
 
         try
-            io:format("RESULTS ~p Row ~p ~n", [Results, NewRows]),
             NewRowSize = calculate_row_size(NewRows),
             update_id_idx(TxDb, Sig, ViewId, DocId, NewRows),
 

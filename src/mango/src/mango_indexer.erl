@@ -20,7 +20,6 @@
 
 
 -export([
-    write_doc/3,
     index_doc/2
 ]).
 
@@ -60,16 +59,15 @@ doc_id(#doc{id = DocId}, _) ->
 
 % Check if design doc is mango index and kick off background worker
 % to build the new index
-modify_int(Db, _Change, #doc{id = <<?DESIGN_DOC_PREFIX, _/binary>>} = Doc,
-        _PrevDoc) ->
+modify_int(Db, Change, #doc{id = <<?DESIGN_DOC_PREFIX, _/binary>>} = Doc,
+        _PrevDoc) when Change == created orelse Change == updated ->
     #{
         name := DbName
     } = Db,
 
-    {Props} = JsonDoc = couch_doc:to_json_obj(Doc, []),
+    {Props} = couch_doc:to_json_obj(Doc, []),
     case proplists:get_value(<<"language">>, Props) of
         <<"query">> ->
-%%            [Idx] = mango_idx:from_ddoc(Db, JsonDoc),
             {ok, Mrst} = couch_mrview_util:ddoc_to_mrst(DbName, Doc),
             couch_views_fdb:create_build_vs(Db, Mrst),
             {ok, _} = couch_views_jobs:build_view_async(Db, Mrst, true);
@@ -77,25 +75,12 @@ modify_int(Db, _Change, #doc{id = <<?DESIGN_DOC_PREFIX, _/binary>>} = Doc,
             ok
     end;
 
-%%modify_int(Db, deleted, _, PrevDoc)  ->
-%%    remove_doc(Db, PrevDoc, json_indexes(Db));
-
-%%modify_int(Db, updated, Doc, PrevDoc) ->
-%%    Indexes = json_indexes(Db),
-%%    remove_doc(Db, PrevDoc, Indexes),
-%%    write_doc(Db, Doc, Indexes);
-%%
-modify_int(Db, _, Doc, _) ->
-    write_doc(Db, Doc, json_indexes(Db));
-%%
-%%modify_int(Db, recreated, Doc, _) ->
-%%    write_doc(Db, Doc, json_indexes(Db));
-
-modify_int(_, _, _, _) ->
-    ok.
+modify_int(Db, _Change, Doc, _Prev) ->
+    write_doc(Db, Doc).
 
 
-write_doc(Db, #doc{deleted = Deleted} = Doc, Indexes) ->
+write_doc(Db, #doc{deleted = Deleted} = Doc) ->
+    Indexes = json_indexes(Db),
     #doc{id = DocId} = Doc,
     JsonDoc = mango_json:to_binary(couch_doc:to_json_obj(Doc, [])),
 
@@ -113,7 +98,6 @@ write_doc(Db, #doc{deleted = Deleted} = Doc, Indexes) ->
                 DocResult0#{results => Results}
         end,
 
-        io:format("HERE ~p ~n", [DocResult1]),
         DbName = mango_idx:dbname(Idx),
         DDoc = mango_idx:ddoc(Idx),
         {ok, Mrst} = couch_mrview_util:ddoc_to_mrst(DbName, DDoc),
@@ -121,7 +105,6 @@ write_doc(Db, #doc{deleted = Deleted} = Doc, Indexes) ->
             sig = Sig,
             views = Views
         } = Mrst,
-        io:format("WRITE ~p ~n", [Views]),
         couch_views_fdb:write_doc(Db, Sig, Views, DocResult1)
     end, Indexes).
 
@@ -135,7 +118,6 @@ json_indexes(Db) ->
 index_doc(Indexes, Doc) ->
     lists:map(fun(Idx) ->
         {IdxDef} = mango_idx:def(Idx),
-        io:format("DEF ~p ~n", [IdxDef]),
         Results = get_index_entries(IdxDef, Doc),
         case lists:member(not_found, Results) of
             true ->

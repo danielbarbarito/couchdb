@@ -794,7 +794,7 @@ fold_docs(Db, UserFun, UserAcc0, Options) ->
 
             Prefix = erlfdb_tuple:pack({?DB_ALL_DOCS}, DbPrefix),
             Meta = get_all_docs_meta(TxDb, Options),
-
+                
             UserAcc1 = maybe_stop(UserFun({meta, Meta}, UserAcc0)),
 
             UserAcc2 = fabric2_fdb:fold_range(TxDb, Prefix, fun({K, V}, Acc) ->
