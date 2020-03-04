@@ -61,8 +61,9 @@ list(Db) ->
         db => Db,
         rows => []
     },
+    Opts = [{send_meta, false}],
     CB = fun ddoc_fold_cb/2,
-    {ok, Indexes} = fabric2_db:fold_design_docs(Db, CB, Acc0, []),
+    {ok, Indexes} = fabric2_db:fold_design_docs(Db, CB, Acc0, Opts),
     Indexes ++ special(Db).
 
 ddoc_fold_cb({meta, _}, Acc) ->
